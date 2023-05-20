@@ -73,6 +73,18 @@ def adj_generator(input_list,index_node,node_wire_outsub):
                 adj_mat[i][j]=1
     return adj_mat
 
+#生成有向图邻接矩阵
+def adj_direction_generator(index_node,node_wire_outsub):
+    num_node=len(index_node)
+    adj_direction_mat=np.zeros((num_node,num_node),dtype=int)
+    for i in index_node:
+        for j in index_node:
+            if any([item==node_wire_outsub[i][-1] for item in node_wire_outsub[j][:-1]]):
+                adj_direction_mat[i][j]=1
+            elif any([item==node_wire_outsub[j][-1] for item in node_wire_outsub[i][:-1]]):
+                adj_direction_mat[i][j]=-1
+    return adj_direction_mat
+
 #统计与输入端口相连的节点和与输出端口相连的节点
 def node2io(input_list,output_list,index_node,node_wire_outsub):
     dic_in={} #统计与输入端口相连的节点
