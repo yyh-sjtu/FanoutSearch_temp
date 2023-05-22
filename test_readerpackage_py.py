@@ -35,12 +35,38 @@ np.savetxt("adj_direction.txt",adj_direction_mat,fmt="%d", delimiter=",")
 adj_direction_mat_pd=pd.DataFrame(adj_direction_mat)
 adj_direction_mat_pd.to_csv('adj_direction_mat.csv')
 
+#生成无符号有向图邻接矩阵
+adj_unsigned_direction_mat=vr.adj_unsigned_direction_generator(index_node,node_wire_outsub)
+np.savetxt("adj_unsigned_direction_untitle.csv",adj_unsigned_direction_mat,fmt="%d", delimiter=",")
+adj_unsigned_direction_mat_pd=pd.DataFrame(adj_unsigned_direction_mat)
+# adj_unsigned_direction_mat_pd.to_csv('adj_unsigned_direction_mat.csv', header=None)
+
+#将reg和comb分类 reg-1 comb-0
+class_list=vr.classify_comb_reg(index_node,node_list)
+np.savetxt("class_list_untitle.csv",class_list,fmt="%d", delimiter=",")
+
+record=vr.fanout(adj_unsigned_direction_mat,class_list) #求每个寄存器的扇出寄存器数量
+print(record)
+
+# compress_mat=vr.compress_graph(adj_unsigned_direction_mat,class_list)
+# np.savetxt("compress_mat.csv",compress_mat,fmt="%d", delimiter=",")
+# count=0
+# for i in range(np.shape(compress_mat)[0]):
+#     if compress_mat[i].sum()!=0:
+#         count+=1
+# print('1:',count)
+
+
+# st_fanout=vr.stat_fanout(compress_mat,class_list)
+# print(st_fanout)
+
+
+
 #生成Mygraph类
 graph=vr.Mygraph(len(adj_mat[0]),adj_mat)
 
 #列出所有与输入输出端口相连的node，存为字典dic_in,dic_out
 dic_in,dic_out=vr.node2io(input_list,output_list,index_node,node_wire_outsub)
-
 
 #由邻接矩阵提取出边，无向图
 edge=ge.mat2edgelist(adj_mat)
