@@ -1,6 +1,7 @@
 #导入依赖库
 import numpy as np
 import pandas as pd
+import torch
 
 #读取文件
 def read_file(file_path):
@@ -88,7 +89,7 @@ def adj_direction_generator(index_node,node_wire_outsub):
 #生成无符号有向图邻接矩阵
 def adj_unsigned_direction_generator(index_node,node_wire_outsub):
     num_node=len(index_node)
-    adj_direction_mat=np.zeros((num_node,num_node),dtype=int)
+    adj_direction_mat=np.zeros((num_node,num_node),dtype=np.int8)
     for i in index_node:
         for j in index_node:
             if any([item==node_wire_outsub[i][-1] for item in node_wire_outsub[j][:-1]]):
@@ -130,7 +131,66 @@ def fanout(adj_unsigned_direction_mat,class_list):
               
         record.append( [ item_index_reg,(np.shape(index_reg)[0]-np.shape(notfanout_reg)[0]) ] ) #记录结果
     return record
+
+
+def fanout_fast_zhou(mat,class_list):
     
+    index_reg=np.where(class_list==1)[0] #得出寄存器节点的节点索引
+    
+    record=[] #记录结果
+    
+    for item_index_reg in index_reg: #遍历寄存器节点
+        currentnode=np.array([item_index_reg],dtype=int) #当前准备作为出发点的节点
+        notfanout_reg=np.array(index_reg,dtype=int) #还没有被算为扇出寄存器的寄存器
+        
+        while(np.shape(currentnode)[0]>0): #当currentnode不为空就一直循环
+            nextnode=np.array([],dtype=int) #初始化nextnode，即所有currentnode扇出的所有节点
+            for i in currentnode:
+                nextnode=np.hstack((nextnode,np.where(mat[int(i)]==1)[0]))
+                
+            nextnode=np.unique(nextnode) #防止nextnode中出现两个一样的节点
+            
+            if len(np.intersect1d(nextnode,index_reg))>0: #如果nextnode中含有寄存器节点
+                next=np.setdiff1d(nextnode,index_reg) #将nextnode中的寄存器节点删除，并赋值给next
+                notfanout_reg=np.setdiff1d(notfanout_reg,nextnode) #将已经被算为扇出寄存器的寄存器从notfanout_reg里删除，这是为了防止一个寄存器被重复计为扇出寄存器（当电路中出现一个寄存器的输出分别通过两条分叉的组合逻辑路径传递给自己的扇出寄存器时会出现这种情况）
+                nextnode=np.array(next,dtype=int) #更新nextnode
+            
+            currentnode=np.array(nextnode,dtype=int) #更新currentnode 这个算法就是一层一层地往外搜索
+              
+        record.append( [ item_index_reg,(np.shape(index_reg)[0]-np.shape(notfanout_reg)[0]) ] ) #记录结果
+    return record
+
+    
+def fanout_counter_Li(connect_matrix, node_list):
+    connect_matrix=torch.tensor(connect_matrix)
+    node_list=torch.tensor(node_list).t()
+    #  结果统计数组
+    fanout = []
+    # 连接矩阵的转置矩阵
+    connect_matrix_t = connect_matrix.t()
+    # 返回两种节点的索引值
+    reg_node = torch.nonzero(node_list)
+    com_node = torch.nonzero(node_list == 0)
+    # 遍历所有组合逻辑节点
+    for index in com_node:
+        i = index.item()
+        # 获得有指向当前组合逻辑节点路径的所有节点
+        input_node = torch.nonzero(connect_matrix[i])
+        # 将离开当前组合逻辑节点路径传递给每一个input_node
+        connect_matrix_t[input_node] += connect_matrix_t[i]
+        # 在图中删除当前组合逻辑节点（对应向量置0）
+        connect_matrix_t[index, :] = 0
+        connect_matrix[index, :] = 0
+        # print(connect_matrix)
+    # 遍历所有reg节点
+    for index in reg_node:
+        i = index.item()
+        # 统计每个reg节点的fanout数量
+        fanout_num = torch.count_nonzero(connect_matrix[i]).item()
+        # 输出[节点索引，fanout数量]
+        fanout.append([i, fanout_num])
+
+    return fanout
 
 # def compress_graph(adj_unsigned_direction_mat,class_list):
 #     mat=np.array(adj_unsigned_direction_mat)
