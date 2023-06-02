@@ -40,9 +40,22 @@ node_wiredf.to_csv('node_wiredf.csv')
 
 #生成无符号有向图邻接矩阵
 adj_unsigned_direction_mat=vr.adj_unsigned_direction_generator(index_node,node_wire_outsub)
+
 # np.savetxt("adj_unsigned_direction_untitle.csv",adj_unsigned_direction_mat,fmt="%d", delimiter=",")
+
 # adj_unsigned_direction_mat_pd=pd.DataFrame(adj_unsigned_direction_mat)
 # adj_unsigned_direction_mat_pd.to_csv('adj_unsigned_direction_mat.csv', header=None)
+
+
+#生成有向图邻接表
+adj_list=vr.adj_list_generator(index_node,node_wire_outsub)
+
+
+#生成有向图反邻接表（每行存的是对应节点的输入节点）
+adj_list_p,adj_list_inv=vr.adj_list_with_inv_generator(index_node,node_wire_outsub)
+
+with open('adj_list_inv.txt','w+') as f:
+    f.write(str(adj_list_inv))
 
 
 #将reg和comb分类 reg-1 comb-0
@@ -71,6 +84,7 @@ record_Li=vr.fanout_counter_Li(adj_unsigned_direction_mat,class_list)
 endtime2=time.time()
 print('算法2用时：',endtime2-starttime2)
 # print(record_Li)
+
 
 if (np.array(record,dtype=int)==np.array(record_Li,dtype=int)).all():
     print('True')
@@ -108,11 +122,61 @@ else:
 # G.add_nodes_from(index_node) #添加节点
 # G.add_edges_from(edge) #添加边
 
-# #由邻接矩阵提取出边，有向图
-# edge_direction=ge.mat2edgelist_direction(adj_direction_mat)
-
+#由邻接矩阵提取出边，有向图
+edge_direction01=ge.mat2edgelist_direction_01(adj_unsigned_direction_mat)
+# print(edge_direction01)
+# print(np.shape(edge_direction01))
 # G_direction=nx.DiGraph()
 
+print('执行基于边集的算法3')
+starttime3=time.time()
+record_edge3=vr.fanout_counter_edge(edge_direction01,class_list)
+endtime3=time.time()
+print('算法3用时：',endtime3-starttime3)
+
+if (np.array(record,dtype=int)==np.array(record_edge3,dtype=int)).all():
+    print('True')
+else:
+    print('False')
+    
+
+print('执行基于邻接表的算法4')
+starttime4=time.time()
+record_edge4=vr.fanout_adj_list_zhou(adj_list,class_list)
+endtime4=time.time()
+print('算法4用时：',endtime4-starttime4)
+
+if (np.array(record,dtype=int)==np.array(record_edge4,dtype=int)).all():
+    print('True')
+else:
+    print('False')
+    
+print('执行基于邻接表的算法6')
+starttime6=time.time()
+record_edge6=vr.fanout_adj_list_li_p_inv(adj_list_p,adj_list_inv,class_list)
+endtime6=time.time()
+print('算法6用时：',endtime6-starttime6)
+
+
+if (np.array(record,dtype=int)==np.array(record_edge6,dtype=int)).all():
+    print('True')
+else:
+    print('False')
+
+# print(record_edge6)
+# print('执行基于邻接表的算法5_li')
+# starttime5=time.time()
+# record_edge5=vr.fanout_adj_list_li(adj_list_p,adj_list_inv,class_list)
+# endtime5=time.time()
+# print('算法5用时：',endtime5-starttime5)
+
+# if (np.array(record,dtype=int)==np.array(record_edge5,dtype=int)).all():
+#     print('True')
+# else:
+#     print('False')
+
+# print(record)
+# print(record_edge5)
 # G_direction.add_nodes_from(index_node)
 # G_direction.add_edges_from(edge_direction)
 # nx.draw(G_direction, with_labels=True,node_size=50,font_size=5,width=0.1,pos = nx.random_layout(G_direction))

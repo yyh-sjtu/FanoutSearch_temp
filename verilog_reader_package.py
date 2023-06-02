@@ -96,6 +96,33 @@ def adj_unsigned_direction_generator(index_node,node_wire_outsub):
                 adj_direction_mat[i][j]=1
     return adj_direction_mat
 
+#生成邻接表
+def adj_list_generator(index_node,node_wire_outsub):
+    adj_list=[]
+    for i in index_node:
+        adj_list_sub=[]
+        for j in index_node:
+            if any([item==node_wire_outsub[i][-1] for item in node_wire_outsub[j][:-1]]):
+                adj_list_sub.append(j)
+        adj_list.append(adj_list_sub)
+    return adj_list
+
+#生成正邻接表和反邻接表
+def adj_list_with_inv_generator(index_node,node_wire_outsub):
+    adj_list=[]
+    adj_list_inv=[]
+    for i in index_node:
+        adj_list_sub=[]
+        adj_list_inv_sub=[]
+        for j in index_node:
+            if any([item==node_wire_outsub[i][-1] for item in node_wire_outsub[j][:-1]]):
+                adj_list_sub.append(j)
+            if any([item==node_wire_outsub[j][-1] for item in node_wire_outsub[i][:-1]]):
+                adj_list_inv_sub.append(j)
+        adj_list.append(adj_list_sub)
+        adj_list_inv.append(adj_list_inv_sub)
+    return adj_list,adj_list_inv
+
 def classify_comb_reg(index_node,node_list):
     class_list=np.zeros_like(index_node)
     for i in index_node:
@@ -160,6 +187,31 @@ def fanout_fast_zhou(mat,class_list):
         record.append( [ item_index_reg,(np.shape(index_reg)[0]-np.shape(notfanout_reg)[0]) ] ) #记录结果
     return record
 
+def fanout_fast_zhou2(mat,class_list):
+    
+    index_reg=np.where(class_list==1)[0] #得出寄存器节点的节点索引
+    
+    record=[] #记录结果
+    
+    for item_index_reg in index_reg: #遍历寄存器节点
+        currentnode=np.array([item_index_reg],dtype=int) #当前准备作为出发点的节点
+        notfanout_reg=np.array(index_reg,dtype=int) #还没有被算为扇出寄存器的寄存器
+        
+        while(np.shape(currentnode)[0]>0): #当currentnode不为空就一直循环
+
+            nextnode=np.where(mat[currentnode,:]==1)[1] #矩阵越大这里越慢，估计是由于存在访存缺失替换率过高的问题
+            nextnode=np.unique(nextnode) #防止nextnode中出现两个一样的节点
+            
+            if len(np.intersect1d(nextnode,index_reg))>0: #如果nextnode中含有寄存器节点
+                next=np.setdiff1d(nextnode,index_reg) #将nextnode中的寄存器节点删除，并赋值给next
+                notfanout_reg=np.setdiff1d(notfanout_reg,nextnode) #将已经被算为扇出寄存器的寄存器从notfanout_reg里删除，这是为了防止一个寄存器被重复计为扇出寄存器（当电路中出现一个寄存器的输出分别通过两条分叉的组合逻辑路径传递给自己的扇出寄存器时会出现这种情况）
+                nextnode=np.array(next,dtype=int) #更新nextnode
+            
+            currentnode=np.array(nextnode,dtype=int) #更新currentnode 这个算法就是一层一层地往外搜索
+              
+        record.append( [ item_index_reg,(np.shape(index_reg)[0]-np.shape(notfanout_reg)[0]) ] ) #记录结果
+    return record
+
     
 def fanout_counter_Li(connect_matrix, node_list):
     connect_matrix=torch.tensor(connect_matrix)
@@ -192,6 +244,100 @@ def fanout_counter_Li(connect_matrix, node_list):
 
     return fanout
 
+def fanout_counter_edge(edge,class_list):
+    index_reg=np.where(class_list==1)[0] #得出寄存器节点的节点索引
+    record=[] #记录结果
+    
+    for item_index_reg in index_reg: #遍历寄存器节点
+        currentnode=np.array([item_index_reg],dtype=int) #当前准备作为出发点的节点
+        notfanout_reg=np.array(index_reg,dtype=int) #还没有被算为扇出寄存器的寄存器
+        
+        while(np.shape(currentnode)[0]>0): #当currentnode不为空就一直循环
+            nextnode=np.array([],dtype=int) #初始化nextnode，即所有currentnode扇出的所有节点
+            for i in currentnode:
+                nextnode=np.hstack( ( nextnode, edge[np.where(edge[:,0]==i)[0],1] ) )
+                
+            nextnode=np.unique(nextnode) #防止nextnode中出现两个一样的节点
+            
+            if len(np.intersect1d(nextnode,index_reg))>0: #如果nextnode中含有寄存器节点
+                next=np.setdiff1d(nextnode,index_reg) #将nextnode中的寄存器节点删除，并赋值给next
+                notfanout_reg=np.setdiff1d(notfanout_reg,nextnode) #将已经被算为扇出寄存器的寄存器从notfanout_reg里删除，这是为了防止一个寄存器被重复计为扇出寄存器（当电路中出现一个寄存器的输出分别通过两条分叉的组合逻辑路径传递给自己的扇出寄存器时会出现这种情况）
+                nextnode=np.array(next,dtype=int) #更新nextnode
+            
+            currentnode=np.array(nextnode,dtype=int) #更新currentnode 这个算法就是一层一层地往外搜索
+              
+        record.append( [ item_index_reg,(np.shape(index_reg)[0]-np.shape(notfanout_reg)[0]) ] ) #记录结果
+    return record
+
+def fanout_adj_list_zhou(adj_list,class_list):
+    index_reg=np.where(class_list==1)[0] #得出寄存器节点的节点索引
+    record=[] #记录结果
+    
+    for item_index_reg in index_reg: #遍历寄存器节点
+        currentnode=np.array([item_index_reg],dtype=int) #当前准备作为出发点的节点
+        notfanout_reg=np.array(index_reg,dtype=int) #还没有被算为扇出寄存器的寄存器
+        
+        while(np.shape(currentnode)[0]>0): #当currentnode不为空就一直循环
+            nextnode=np.array([i2 for i1 in currentnode for i2 in adj_list[i1]])
+            nextnode=np.unique(nextnode) #防止nextnode中出现两个一样的节点
+            
+            if len(np.intersect1d(nextnode,index_reg))>0: #如果nextnode中含有寄存器节点
+                next=np.setdiff1d(nextnode,index_reg) #将nextnode中的寄存器节点删除，并赋值给next
+                notfanout_reg=np.setdiff1d(notfanout_reg,nextnode) #将已经被算为扇出寄存器的寄存器从notfanout_reg里删除，这是为了防止一个寄存器被重复计为扇出寄存器（当电路中出现一个寄存器的输出分别通过两条分叉的组合逻辑路径传递给自己的扇出寄存器时会出现这种情况）
+                nextnode=np.array(next,dtype=int) #更新nextnode
+            
+            currentnode=np.array(nextnode,dtype=int) #更新currentnode 这个算法就是一层一层地往外搜索
+              
+        record.append( [ item_index_reg,(np.shape(index_reg)[0]-np.shape(notfanout_reg)[0]) ] ) #记录结果
+    return record
+
+def fanout_adj_list_li(adj_list,adj_list_inv,class_list):
+    fanout=[]
+    index_reg=np.where(class_list==1)[0] #得出寄存器节点的节点索引
+    index_com=np.where(class_list==0)[0] #得出组合逻辑节点的节点索引
+    adj_list=list(adj_list)
+    # adj_list_inv=list(adj_list_inv)
+    
+    for index in index_com:
+        temp=list(adj_list[index])
+        for row in adj_list:
+            if index in row:
+                if row!=adj_list[index]:
+                    row+=temp
+                    while index in row:
+                        row.remove(index)
+        adj_list[index]=[]
+        
+    for index in index_reg:
+        fanout.append([index,len(set(adj_list[index]))])
+    return fanout
+    
+def fanout_adj_list_li_p_inv(adj_list,adj_list_inv,class_list):
+    fanout=[]
+    index_reg=np.where(class_list==1)[0] #得出寄存器节点的节点索引
+    index_com=np.where(class_list==0)[0] #得出组合逻辑节点的节点索引
+    adj_list=list(adj_list)
+    adj_list_inv=list(adj_list_inv)
+    
+    for item_index_com in index_com: #两个子循环互为相反，可称为互补
+        inputnode=adj_list_inv[item_index_com]
+        outputnode=adj_list[item_index_com]
+        for item_inputnode in inputnode:
+            adj_list[item_inputnode].remove(item_index_com) #这边必须放在前面，因为当去掉节点item_index_com时，必须要把其在inputnode中的记录删去，但是最后inputnode的扇出还是有可能又item_index_com，因为可能存在环路
+            adj_list[item_inputnode]+=adj_list[item_index_com]
+            # adj_list[item_inputnode]=list(set(adj_list[item_inputnode])) #这边也可以不用执行，后面计算总删除会去掉重复项
+        # adj_list[item_index_com]=[]    #按道理这边是应该执行的，但是考虑到这边后面不会再被访问到了，因此可以选择不执行来减少程序运行时间
+        
+        for item_outputnode in outputnode:
+            adj_list_inv[item_outputnode].remove(item_index_com)
+            adj_list_inv[item_outputnode]+=adj_list_inv[item_index_com]
+            # adj_list_inv[item_outputnode]=list(set(adj_list_inv[item_outputnode]))  #这边也可以不用执行，后面计算总删除会去掉重复项
+        # adj_list_inv[item_index_com]=[] #按道理这边是应该执行的，但是考虑到这边后面不会再被访问到了，因此可以选择不执行来减少程序运行时间
+            
+    for item_index_reg in index_reg:
+        fanout.append([item_index_reg,len(set(adj_list[item_index_reg]))])
+    return fanout
+        
 # def compress_graph(adj_unsigned_direction_mat,class_list):
 #     mat=np.array(adj_unsigned_direction_mat)
 #     index_comb=np.where(class_list==0)[0]
