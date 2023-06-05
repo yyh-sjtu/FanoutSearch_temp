@@ -103,6 +103,96 @@ def netlist_extract(txt1):
     
     return input_list,output_list,node_list,index_node,node_wire_insub,node_wire_outsub,module_name,wire_dic,adj_list,index_nodewire,wire_node_name_list
 
+def netlist_extract_lite(txt1):
+    #区分input output 和内部连线
+
+    index_wire=0
+    wire_dic={}
+    adj_list=[]
+    wire_node_name_list=[]
+    for index,i in enumerate(txt1):
+    
+        if i[:7]=='module ':#识别出模块名
+            module_split=i[7:-1].replace('(',',').split(',')
+            module_name=module_split[0]
+            module_IoList=[item.strip() for item in module_split[1:]]
+            
+        elif i.split(' ')[0]=='input':#产生输入端口列表
+            if '[' in i: #检测是不是多位总线
+                for item in range(int(i.split('[')[1].split(':')[0])+1):
+
+                    currentnode=i.split(' ')[-1]+'['+str(item)+']'
+                    wire_dic.update({currentnode:index_wire})
+                    index_wire+=1
+                    adj_list.append([])
+                    wire_node_name_list.append(currentnode)
+                    #print(i.split(' ')[-1]+'['+str(item)+']')
+                    #print(i.split(' ')[-1]+'['+str(item)+']'=='i_denominator[0]')
+            else: 
+                currentnode=i.split(' ')[-1]
+                
+                wire_dic.update({currentnode:index_wire})
+                index_wire+=1
+                adj_list.append([])
+                wire_node_name_list.append(currentnode)
+                
+        elif i.split(' ')[0]=='output':#产生输出端口列表
+            if '[' in i: #检测是不是多位总线
+                for item in range(int(i.split('[')[1].split(':')[0])+1):
+                    currentnode=i.split(' ')[-1]+'['+str(item)+']'
+                    
+                    wire_dic.update({currentnode:index_wire})
+                    index_wire+=1
+                    adj_list.append([])
+                    wire_node_name_list.append(currentnode)
+                    # print(i.split(' ')[-1]+'['+str(item)+']')
+            else:
+                currentnode=i.split(' ')[-1]
+                
+                wire_dic.update({currentnode:index_wire})
+                index_wire+=1
+                adj_list.append([])
+                wire_node_name_list.append(currentnode)
+        
+        elif (i.split(' ')[0]=='wire') & ~(i.split(' ')[-1] in module_IoList):#产生内部连线列表
+            currentnode=i.split(' ')[-1]
+            
+            wire_dic.update({currentnode:index_wire})
+            index_wire+=1
+            adj_list.append([])
+            wire_node_name_list.append(currentnode)
+            #print(i.split(' ')[-1])
+            
+        elif 'sky130' in i:
+            break
+            
+    node_list=[]
+    node_wire_insub=[]
+    node_wire_outsub=[]
+    index_node_count=index_wire
+    
+    for item in txt1[index:]:
+        if item=='endmodule':
+            break
+        else:
+            # print(item.split(' (')[0])
+            c_node_list=item.split(' (')[0] #提取子模块，在这里一个子模块是一个节点
+            node_wire_insub=[subitem.strip().split('(')[0] for subitem in item.split('.')[1:]] #提取子模块内部定义的端口名
+            node_wire_outsub=[subitem.split(')')[0].strip() for subitem in item.split('(')[2:]] #提取与子模块对应的互连线
+            adj_list.append([])
+            wire_node_name_list.append(c_node_list)
+            for item in node_wire_outsub[:-1]:
+                adj_list[wire_dic[item]].append(index_node_count)
+                
+            adj_list[-1].append(wire_dic[node_wire_outsub[-1]])
+            
+            index_node_count+=1
+            
+    index_node=list(range(len(node_list)))
+    index_nodewire=list(range(len(adj_list)))
+    
+    return adj_list,index_nodewire,index_node,wire_node_name_list
+
 #生成邻接矩阵
 def adj_generator(input_list,index_node,node_wire_outsub):
     num_node=len(index_node)
@@ -178,6 +268,12 @@ def classify_wire_comb_reg(wirenode_list):
         if 'dfxtp' in wirenode_list[i]:
             class_list[i]=1
     return class_list
+
+def classify_wire_comb_reg_return_index(wirenode_list):
+    index_node=list(range(len(wirenode_list)))
+    index_reg_list=np.array([i for i in index_node if 'dfxtp' in wirenode_list[i]])
+
+    return index_reg_list
     
 
 def fanout(adj_unsigned_direction_mat,class_list):
@@ -363,6 +459,83 @@ def fanout_adj_list_zhou_fast(adj_list,class_list):
               
         record.append( [ item_index_reg,(np.shape(index_reg)[0]-np.shape(notfanout_reg)[0]) ] ) #记录结果
     return record
+
+def fanout_adj_list_zhou_fast_withroadlength(adj_list,class_list):
+    index_reg=np.where(class_list==1)[0] #得出寄存器节点的节点索引
+    record=[] #记录结果
+    
+    for item_index_reg in index_reg: #遍历寄存器节点
+        currentnode=np.array([item_index_reg],dtype=int) #当前准备作为出发点的节点
+        notfanout_reg=np.array(index_reg,dtype=int) #还没有被算为扇出寄存器的寄存器
+        roadlength=0
+        while(np.shape(currentnode)[0]>0): #当currentnode不为空就一直循环
+            roadlength+=1
+            # nextnode=np.array([i2 for i1 in currentnode for i2 in adj_list[i1]])
+            nextnode=np.array([i3 for i1 in currentnode for i2 in adj_list[i1] for i3 in adj_list[i2]]) #直接跳过wirenode
+            nextnode=np.unique(nextnode) #防止nextnode中出现两个一样的节点
+            
+            if len(np.intersect1d(nextnode,index_reg))>0: #如果nextnode中含有寄存器节点
+                next=np.setdiff1d(nextnode,index_reg) #将nextnode中的寄存器节点删除，并赋值给next
+                notfanout_reg=np.setdiff1d(notfanout_reg,nextnode) #将已经被算为扇出寄存器的寄存器从notfanout_reg里删除，这是为了防止一个寄存器被重复计为扇出寄存器（当电路中出现一个寄存器的输出分别通过两条分叉的组合逻辑路径传递给自己的扇出寄存器时会出现这种情况）
+                nextnode=np.array(next,dtype=int) #更新nextnode
+            
+            currentnode=np.array(nextnode,dtype=int) #更新currentnode 这个算法就是一层一层地往外搜索
+              
+        record.append( [ item_index_reg,(np.shape(index_reg)[0]-np.shape(notfanout_reg)[0]),roadlength] ) #记录结果
+    return record
+
+def fanout_adj_list_zhou_fast_6_5(adj_list,class_list):
+    
+    index_reg=np.where(class_list==1)[0] #得出寄存器节点的节点索引
+    record=[] #记录结果
+    
+    for item_index_reg in index_reg: #遍历寄存器节点
+        
+        currentnode=np.array([item_index_reg],dtype=int) #当前准备作为出发点的节点
+        fanout_reg=np.array([],dtype=int)
+        
+        while(np.shape(currentnode)[0]>0): #当currentnode不为空就一直循环
+            # nextnode=np.array([i2 for i1 in currentnode for i2 in adj_list[i1]])
+            nextnode=np.array([i3 for i1 in currentnode for i2 in adj_list[i1] for i3 in adj_list[i2]]) #直接跳过wirenode
+            nextnode=np.unique(nextnode) #防止nextnode中出现两个一样的节点
+            
+            intersect=np.intersect1d(nextnode,index_reg)
+            if len(intersect)>0: #如果nextnode中含有寄存器节点
+                next=np.setdiff1d(nextnode,intersect) #将nextnode中的寄存器节点删除，并赋值给next
+                fanout_reg=np.union1d(fanout_reg,intersect)
+                nextnode=next
+            
+            currentnode=nextnode
+              
+        record.append( [ item_index_reg,len(fanout_reg) ] ) #记录结果
+    return record
+
+def fanout_adj_list_zhou_fast_6_5_index_reg_list(adj_list,class_reg_list):
+    
+    index_reg=class_reg_list #得出寄存器节点的节点索引
+    record=[] #记录结果
+    
+    for item_index_reg in index_reg: #遍历寄存器节点
+        
+        currentnode=np.array([item_index_reg],dtype=int) #当前准备作为出发点的节点
+        fanout_reg=np.array([],dtype=int)
+        
+        while(np.shape(currentnode)[0]>0): #当currentnode不为空就一直循环
+            # nextnode=np.array([i2 for i1 in currentnode for i2 in adj_list[i1]])
+            nextnode=np.array([i3 for i1 in currentnode for i2 in adj_list[i1] for i3 in adj_list[i2]]) #直接跳过wirenode
+            nextnode=np.unique(nextnode) #防止nextnode中出现两个一样的节点
+            
+            intersect=np.intersect1d(nextnode,index_reg)
+            if len(intersect)>0: #如果nextnode中含有寄存器节点
+                next=np.setdiff1d(nextnode,intersect) #将nextnode中的寄存器节点删除，并赋值给next
+                fanout_reg=np.union1d(fanout_reg,intersect)
+                nextnode=next
+            
+            currentnode=nextnode
+              
+        record.append( [ item_index_reg,len(fanout_reg) ] ) #记录结果
+    return record
+
 
 def fanout_adj_list_li(adj_list,adj_list_inv,class_list):
     fanout=[]
