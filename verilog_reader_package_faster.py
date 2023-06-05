@@ -165,8 +165,8 @@ def netlist_extract_lite(txt1):
             
         elif 'sky130' in i:
             break
-            
-    node_list=[]
+    
+    num_wire=len(adj_list)        
     node_wire_insub=[]
     node_wire_outsub=[]
     index_node_count=index_wire
@@ -188,10 +188,10 @@ def netlist_extract_lite(txt1):
             
             index_node_count+=1
             
-    index_node=list(range(len(node_list)))
+
     index_nodewire=list(range(len(adj_list)))
     
-    return adj_list,index_nodewire,index_node,wire_node_name_list
+    return adj_list,num_wire,wire_node_name_list
 
 #生成邻接矩阵
 def adj_generator(input_list,index_node,node_wire_outsub):

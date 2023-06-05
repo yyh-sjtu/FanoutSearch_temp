@@ -25,11 +25,13 @@ txt=vr.read_file(file_name)
 #lite版占用的内存较小，但是速度没什么提升
 print('----提网表----')
 time_extrace_start_lite=time.time()
-adj_list_lite,index_nodewire_lite,index_node_lite,wire_node_name_list_lite=vr.netlist_extract_lite(txt)
+adj_list_lite,num_wire,wire_node_name_list_lite=vr.netlist_extract_lite(txt)
 time_extrace_end_lite=time.time()
 print('提网表用时',time_extrace_end_lite-time_extrace_start_lite)
-num_wire=len(index_nodewire_lite)-len(index_node_lite)
 
+
+# print(len(index_nodewire_lite))
+# print(len(index_node_lite))
 # print(len(wire_dic))
 # print(wire_dic)
 
@@ -62,8 +64,8 @@ record_nodewire=vr.fanout_adj_list_zhou_fast_6_5_index_reg_list(adj_list_lite,cl
 endtime0=time.time()
 print('wirenode用时',endtime0-starttime0)
 
-# for item in record_nodewire:
-#     item[0]-=num_wire
+for item in record_nodewire:
+    item[0]-=num_wire
     
 time_whole_end=time.time()
 print('总用时',time_whole_end-time_whole_start)
